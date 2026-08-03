@@ -11,6 +11,8 @@ format:
 execute:
   echo: true
   warning: false
+  fig-width: 8
+  fig-height: 5.5
 ---
 
 ## Where we are
@@ -306,6 +308,8 @@ points on average") makes them far less abstract.
 ## Seeing RMSD: a few deliberately bad fits
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
 candidates <- list(c(mu = 5, sigma = 1), c(mu = 5, sigma = 0.1),
                     c(mu = 2, sigma = 1), c(mu = 8, sigma = 3))
 
@@ -357,7 +361,7 @@ function normCdf(x, mean, sd) {
   return 0.5 * (1 + erf((x - mean) / (sd * Math.sqrt(2))));
 }
 
-predicted_points = data_ojs.map(d => ({
+predicted_points = transpose(data_ojs).map(d => ({
   ...d,
   pred: normCdf(d.intensity, mu_slider, sigma_slider)
 }))
@@ -376,7 +380,7 @@ Plot.plot({
   y: {domain: [0, 1], label: "P('yes')"},
   marks: [
     Plot.line(curve_points, {x: "intensity", y: "pred", stroke: "steelblue"}),
-    Plot.dot(data_ojs, {x: "intensity", y: "prop_yes", r: 5, fill: "black"})
+    Plot.dot(transpose(data_ojs), {x: "intensity", y: "prop_yes", r: 5, fill: "black"})
   ],
   caption: `RMSD = ${rmsd_value.toFixed(3)}`
 })
