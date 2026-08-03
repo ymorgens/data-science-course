@@ -1,0 +1,679 @@
+---
+title: "Parameter Estimation"
+subtitle: "Basic Methods & Maximum Likelihood"
+format:
+  revealjs:
+    theme: simple
+    slide-number: true
+    incremental: false
+    code-line-numbers: true
+execute:
+  echo: true
+  warning: false
+---
+
+## Where we are
+
+- Last week: what *is* a model, and why do psychologists build them?
+- Today: once you have a model, how do you find the numbers that make it fit your data?
+- Next: how do you decide *which* model wins (Model Comparison)
+
+------------------------------------------------------------------------
+
+## Learning objectives
+
+By the end of today you should be able to:
+
+1.  Explain what a parameter is, and why we need to *estimate* it from data
+2.  Explain, in words, what the mean and standard deviation of a cumulative normal psychometric function represent
+3.  Explain what RMSD is, and why data never sits exactly on a fitted curve
+4.  Use grid search to find best-fitting parameters by hand, and explain why it doesn't scale
+5.  Explain, at a high level, how `optim()`'s default method (Nelder-Mead simplex) searches — and its limitations, including local minima
+6.  Explain the idea of maximum likelihood, and how it relates to simulating data
+7.  Fit a model using both RMSD and maximum likelihood
+
+------------------------------------------------------------------------
+
+## You already know a model like this
+
+$$y = a + b \cdot x$$
+
+- A straight line has two parameters too: an intercept (`a`) and a slope (`b`)
+- Fitting a line to data — the way you may have done in a stats course — is exactly the same problem we're about to solve today, just with a different-shaped curve
+- We won't fit a line today, but keep it in mind — the tutorial will ask you to
+
+------------------------------------------------------------------------
+
+## A concrete example: what did participants actually see?
+
+```{r}
+old_par <- par(bg = "black", mar = c(4, 1, 3, 1))
+plot(1, type = "n", xlim = c(0.5, 9.5), ylim = c(0, 2), axes = FALSE,
+     xlab = "", ylab = "", main = "")
+title("Stimulus intensity 1 (hardest to see) to 9 (easiest)", col.main = "white")
+intensities <- 1:9
+brightness <- seq(0.12, 1, length.out = 9)
+for (i in seq_along(intensities)) {
+  points(intensities[i], 1, pch = 19, cex = 4.5, col = gray(brightness[i]))
+}
+par(old_par)
+```
+
+- Some spots barely differ from the black background — participants will often say "no" even when one was actually shown
+- Some are unmistakably brighter than the background — participants will almost always say "yes"
+- The interesting region is the middle, where the same physical stimulus gets a mix of "yes" and "no" answers across trials
+
+::: notes
+This is a schematic illustration, not photographs from an actual experiment — the point is to make the detection task concrete before the data table appears. Point out explicitly that the "interesting" middle spots are exactly where the psychometric function has its steepest slope.
+:::
+
+------------------------------------------------------------------------
+
+## A concrete example: a psychometric function
+
+Classic psychophysics setup: on each trial, a stimulus of a given intensity is presented, and the participant says whether they detected it ("yes"/"no"). We repeat this many times at each of several intensities — the same intensities shown on the previous slide.
+
+```{r}
+intensity <- 1:9
+n_trials <- rep(40, 9)
+n_yes <- c(1, 4, 5, 11, 19, 24, 35, 38, 39)
+prop_yes <- n_yes / n_trials
+
+data <- data.frame(intensity, n_yes, n_trials, prop_yes)
+data
+```
+
+
+------------------------------------------------------------------------
+
+## Plotting the data
+
+```{r}
+plot(data$intensity, data$prop_yes, pch = 19,
+     xlab = "Stimulus intensity",
+     ylab = "Proportion 'yes' responses",
+     ylim = c(0, 1), main = "Psychometric function")
+```
+
+- The curve rises from near 0 to near 1 as intensity increases — an S-shape
+- To describe this curve with a model, we need just two numbers
+
+::: notes
+Point at the plot: roughly where does it cross 50%, and roughly how gradual or sharp is the rise. Don't name the parameters yet — that's the next slide.
+:::
+
+------------------------------------------------------------------------
+
+## The model
+
+$$p(x) = \Phi\left(\frac{x - \mu}{\sigma}\right)$$
+
+where $\Phi$ is the cumulative distribution function of the standard normal distribution.
+
+- `mu`: the mean — where the curve crosses 50%
+- `sigma`: the standard deviation — how gradually the curve rises
+
+R gives us the cumulative normal directly via `pnorm()`:
+
+```{r}
+psychometric_model <- function(mu, sigma, x) {
+  pnorm(x, mean = mu, sd = sigma)
+}
+```
+
+We can also write this out as a genuine formula — not just a call to a built-in function with transformed inputs, but the actual mathematical definition, built from elementary operations. The cumulative normal has no simple closed form, but there's a well-known trick: a rescaled logistic function approximates it closely (the constant 1.702 comes from matching the two curves' steepness — this is the same trick used to relate the normal-ogive and logistic models in item-response theory):
+
+```{r}
+psychometric_model_explicit <- function(mu, sigma, x) {
+  z <- (x - mu) / sigma
+  1 / (1 + exp(-1.702 * z))
+}
+
+# these should be very close, though not exact -- this is an approximation
+psychometric_model(5, 1, c(3, 5, 7))
+psychometric_model_explicit(5, 1, c(3, 5, 7))
+```
+
+For comparison, here's the same "write the formula directly" approach applied to the Weibull CDF mentioned on the previous slide — no cumulative-normal machinery involved at all, just its own definition:
+
+```{r}
+weibull_cdf <- function(x, alpha, beta) {
+  y <- rep(0, length(x))
+  valid <- x >= 0
+  y[valid] <- 1 - exp(-(x[valid] / alpha)^beta)
+  y
+}
+```
+
+
+
+Let's see whether a plausible guess looks like our data:
+
+```{r}
+plot(data$intensity, data$prop_yes, pch = 19, ylim = c(0, 1),
+     xlab = "Intensity", ylab = "P('yes')")
+curve(psychometric_model(5, 1, x), add = TRUE, col = "blue")
+```
+
+
+
+------------------------------------------------------------------------
+
+## Why this shape? Cumulative normal vs. alternatives
+
+| Shape | Natural fit for... | Parameters mean... | Chosen because... |
+|------------------|------------------|------------------|------------------|
+| **Cumulative normal** (today) | Symmetric sensory/decision noise | mean & SD — familiar from stats | Directly interpretable in terms you already know |
+| **Weibull** | Physical intensities that can only be positive (contrast, luminance) | threshold & shape | Matches the skew often seen in physical intensity scales; a vision-science convention |
+| **Logistic (sigmoid)** | Whenever computational convenience matters most | threshold & slope — similar meaning to cumulative normal | Simple and fast to compute — this is exactly why it's the default activation function inside a neural network unit, which you'll meet in a few weeks |
+
+- None of these is universally "correct" — the choice depends on what you're assuming about the underlying noise, the measurement scale of your stimulus, and (sometimes) what's computationally convenient
+- We'll return to this kind of question properly in Model Comparison
+
+
+
+------------------------------------------------------------------------
+
+## What does `mu` do?
+
+```{r}
+curve(psychometric_model(3, 1, x), from = 1, to = 9, ylim = c(0, 1), col = "red",
+      xlab = "Intensity", ylab = "P('yes')", main = "Varying mu (sigma fixed at 1)")
+curve(psychometric_model(5, 1, x), add = TRUE, col = "blue")
+curve(psychometric_model(7, 1, x), add = TRUE, col = "darkgreen")
+legend("topleft", legend = c("mu = 3", "mu = 5", "mu = 7"),
+       col = c("red", "blue", "darkgreen"), lty = 1)
+```
+
+- `mu` is where the curve crosses 50% — often called the **threshold**, though be aware "threshold" is a loose term: some fields define it at the 50% point (as we do here), others at 75%, so always check the convention in a given paper
+- It shifts the whole curve left or right, without changing its steepness
+- Psychologically: how sensitive the person is overall — a lower `mu` means they detect fainter stimuli
+
+::: notes
+Let students watch mu and only mu change; the three curves should look like horizontally shifted copies of each other. Worth explicitly connecting back to their stats background: "mu" here is playing exactly the role a mean does in any normal distribution — nothing new about the concept, just a new use for it.
+:::
+
+------------------------------------------------------------------------
+
+## What does `sigma` do?
+
+```{r}
+curve(psychometric_model(5, 0.3, x), from = 1, to = 9, ylim = c(0, 1), col = "red",
+      xlab = "Intensity", ylab = "P('yes')", main = "Varying sigma (mu fixed at 5)")
+curve(psychometric_model(5, 1, x), add = TRUE, col = "blue")
+curve(psychometric_model(5, 3, x), add = TRUE, col = "darkgreen")
+legend("topleft", legend = c("sigma = 0.3", "sigma = 1", "sigma = 3"),
+       col = c("red", "blue", "darkgreen"), lty = 1)
+```
+
+- `sigma` controls **how gradually** the curve transitions from 0 to 1 — all three curves cross 50% at the same point but rise at very different rates
+- This is the *standard deviation* of the underlying normal distribution — a smaller sigma means a sharper, more reliable transition; a larger sigma means a noisier, more gradual one
+- Psychologically: how *reliably* the person's responses track the physical stimulus
+
+------------------------------------------------------------------------
+
+## Why don't the dots sit exactly on the curve?
+
+- The model gives a single, *deterministic* prediction for each intensity
+- But real data always has some trial-to-trial noise
+- We can think of the data as: **model prediction + random error**
+
+$$\text{observed} = \text{model}(\mu, \sigma, x) + \text{error}$$
+
+- This is *why* fitting can get close but never perfect
+
+------------------------------------------------------------------------
+
+## How wrong is a guess? — RMSD
+
+Following the textbook, we use the **root mean squared deviation (RMSD)** rather than a raw sum of squares:
+
+$$\text{RMSD} = \sqrt{\frac{\sum_{j=1}^{J}(d_j - p_j)^2}{J}}$$
+
+```{r}
+rmsd <- function(params, data) {
+  mu <- params[1]
+  sigma <- params[2]
+  predicted <- psychometric_model(mu, sigma, data$intensity)
+  sqrt(mean((data$prop_yes - predicted)^2))
+}
+
+rmsd(c(3, 0.5), data)   # a bad-ish guess
+rmsd(c(5, 1), data)     # a better guess
+```
+
+- Bigger number = worse fit; our job is to make it as small as possible
+- RMSD is in the same units as the data (here, a proportion) and doesn't grow just because we collected more data points, unlike a raw sum of squares — this is why the textbook (and most of the field) prefers it
+
+::: notes
+Run both lines live. The "same units as the data" point is worth emphasizing explicitly — students will meet RMSD values as pure numbers all course, and knowing they're interpretable (e.g., "off by 3 percentage points on average") makes them far less abstract.
+:::
+
+------------------------------------------------------------------------
+
+## Seeing RMSD: a few deliberately bad fits
+
+```{r}
+candidates <- list(c(mu = 5, sigma = 1), c(mu = 5, sigma = 0.1),
+                    c(mu = 2, sigma = 1), c(mu = 8, sigma = 3))
+
+par(mfrow = c(2, 2))
+for (cand in candidates) {
+  pred_curve <- psychometric_model(cand["mu"], cand["sigma"], seq(1, 9, length.out = 200))
+  r <- round(rmsd(cand, data), 3)
+  plot(data$intensity, data$prop_yes, pch = 19, ylim = c(0, 1),
+       xlab = "Intensity", ylab = "P('yes')",
+       main = paste0("mu=", cand["mu"], ", sigma=", cand["sigma"], "  (RMSD=", r, ")"))
+  lines(seq(1, 9, length.out = 200), pred_curve, col = "blue")
+}
+par(mfrow = c(1, 1))
+```
+
+::: notes
+Deliberately pick one good fit and three clearly bad ones (wrong threshold, wrong spread, both wrong) so students can connect "this curve visually misses the dots" to "and that's why its RMSD number is high." Point out explicitly which panel has the lowest RMSD and confirm it's also the one that looks best by eye.
+:::
+
+```{r}
+#| echo: false
+ojs_define(data_ojs = data)
+```
+
+------------------------------------------------------------------------
+
+## Try it yourself — live
+
+```{ojs}
+//| echo: false
+viewof mu_slider = Inputs.range([1, 9], {value: 5, step: 0.1, label: "mu (threshold)"})
+viewof sigma_slider = Inputs.range([0.1, 3], {value: 1, step: 0.05, label: "sigma (spread)"})
+```
+
+```{ojs}
+//| echo: false
+function erf(x) {
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741,
+        a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+function normCdf(x, mean, sd) {
+  return 0.5 * (1 + erf((x - mean) / (sd * Math.sqrt(2))));
+}
+
+predicted_points = data_ojs.map(d => ({
+  ...d,
+  pred: normCdf(d.intensity, mu_slider, sigma_slider)
+}))
+
+curve_points = d3.range(1, 9.01, 0.05).map(x => ({
+  intensity: x,
+  pred: normCdf(x, mu_slider, sigma_slider)
+}))
+
+rmsd_value = Math.sqrt(
+  d3.mean(predicted_points, d => (d.prop_yes - d.pred) ** 2)
+)
+
+Plot.plot({
+  x: {domain: [1, 9], label: "Intensity"},
+  y: {domain: [0, 1], label: "P('yes')"},
+  marks: [
+    Plot.line(curve_points, {x: "intensity", y: "pred", stroke: "steelblue"}),
+    Plot.dot(data_ojs, {x: "intensity", y: "prop_yes", r: 5, fill: "black"})
+  ],
+  caption: `RMSD = ${rmsd_value.toFixed(3)}`
+})
+```
+
+- Drag the sliders and watch RMSD change live — try to find the combination that minimizes it
+- This is exactly what `optim()` will do automatically, in a moment
+
+------------------------------------------------------------------------
+
+## Grid search: try everything
+
+```{r}
+mu_vals <- seq(1, 9, length.out = 100)
+sigma_vals <- seq(0.1, 3, length.out = 100)
+grid <- expand.grid(mu = mu_vals, sigma = sigma_vals)
+
+grid$rmsd <- apply(grid, 1, function(row) rmsd(row, data))
+
+dim(grid)
+head(grid, 10)
+```
+
+```{r}
+best <- grid[which.min(grid$rmsd), ]
+best
+```
+
+- `dim(grid)` confirms we're testing 100 x 100 = 10,000 combinations — every row in `head(grid, 10)` above is one candidate `(mu, sigma)` pair, with its RMSD already computed
+
+------------------------------------------------------------------------
+
+## Seeing the cost surface
+
+```{r}
+library(lattice)
+levelplot(rmsd ~ mu * sigma, data = grid,
+          main = "RMSD across parameter combinations",
+          xlab = "mu (threshold)", ylab = "sigma (spread)")
+```
+
+- Dark blue = low RMSD = good fit
+- Our best-fitting combination sits at the bottom of that "valley"
+
+------------------------------------------------------------------------
+
+## Grid search doesn't scale
+
+| \# parameters | grid points per parameter | total combinations to test |
+|:----------------------:|:----------------------:|:----------------------:|
+| 2 (today's model) | 100 | 10,000 |
+| 4 | 100 | 100,000,000 |
+| 10 (a small neural network) | 100 | 10\^20 |
+
+- Two parameters: totally fine on a laptop
+- A handful more: computationally impossible to brute-force
+- We need something smarter that *searches intelligently* instead of trying everything
+
+::: notes
+Read the last row out loud slowly so the scaling problem registers as absurd rather than abstract.
+:::
+
+------------------------------------------------------------------------
+
+## What is `optim()` actually doing?
+
+Two physical metaphors the textbook uses:
+
+- Imagine the error surface carved out of wood, and you drop a marble onto it — it rolls downhill and comes to rest at the bottom
+
+- Or: a parachutist dropped onto unfamiliar terrain at night, who can't see the whole landscape, only feels which way is downhill from where she's standing right now, and takes small steps accordingly
+
+- Start somewhere (your initial guess), move downhill, repeat until no nearby step improves things
+
+- Much faster than grid search — it doesn't need to check every point on the map
+
+- But: it can walk straight into a small valley that isn't the lowest one overall — a **local minimum**
+
+**Live class demo:** [i-am.ai/gradient-descent.html](https://www.i-am.ai/gradient-descent.html) — an interactive game where you nudge a point downhill on a landscape by hand, before we get to the specifics of the exact method `optim()` uses. (Note: this game illustrates *gradient* descent, which uses the local slope directly — `optim()`'s default method, covered next, doesn't use slope information at all, but the "search downhill, watch out for false valleys" intuition transfers directly.)
+
+------------------------------------------------------------------------
+
+## Meet the method: Nelder-Mead Simplex
+
+When you call `optim()`, its default method is the **Nelder-Mead Simplex** algorithm (Nelder & Mead, 1965).
+
+- A "simplex" is a simple geometric shape: for 2 parameters, it's a **triangle**, with each corner being one candidate `(mu, sigma)` combination to test — for example, one corner might be `(1, 2)`, another `(4, 5)`, another `(6, 6)`
+- At each step, the corner with the *worst* fit is moved: either **reflected** to the opposite side of the triangle (and possibly stretched further, if that direction looks promising), or the whole triangle **contracts** inward if reflection doesn't help
+- Repeating this, the triangle "tumbles" downhill and eventually shrinks to a single point — the best-fitting estimate
+
+```{r}
+bowl <- function(p) (p[1] - 5)^2 + (p[2] - 1)^2
+
+triangle <- rbind(c(1, 3), c(2, 3.5), c(1.5, 4))
+n_steps <- 7
+triangle_history <- vector("list", n_steps)
+triangle_history[[1]] <- triangle
+
+for (step in 2:n_steps) {
+  costs <- apply(triangle, 1, bowl)
+  worst <- which.max(costs)
+  centroid <- colMeans(triangle[-worst, , drop = FALSE])
+  triangle[worst, ] <- centroid + (centroid - triangle[worst, ])
+  triangle_history[[step]] <- triangle
+}
+
+xg <- seq(-2, 10, length.out = 100)
+yg <- seq(-2, 6, length.out = 100)
+zg <- outer(xg, yg, function(x, y) (x - 5)^2 + (y - 1)^2)
+contour(xg, yg, zg, xlab = "mu", ylab = "sigma",
+        main = "A simplex tumbling downhill (simulated)")
+
+step_colors <- colorRampPalette(c("black", "red"))(n_steps)
+for (step in 1:n_steps) {
+  tri <- triangle_history[[step]]
+  polygon(tri[, 1], tri[, 2], border = step_colors[step], lwd = 2)
+}
+legend("topright", legend = c("Step 1 (black)", paste0("Step ", n_steps, " (red)")),
+       col = c("black", "red"), lty = 1, lwd = 2)
+```
+
+::: notes
+This is a genuinely simulated sequence — each step reflects the worst corner through the centroid of the other two, which is the core Nelder-Mead move — but it's simplified (no expansion/contraction/shrink steps, which the real algorithm also uses depending on how much a reflection improves things). Good enough to show the triangle visibly shrinking and moving toward the minimum, color-coded from black (step 1) to red (final step), without needing to reproduce the full bookkeeping live. The textbook's Figure 3.4 covers the complete version, including expansion and contraction, in more depth than we have time for here.
+:::
+
+------------------------------------------------------------------------
+
+## `optim()`: automatic search
+
+```{r}
+fit_rmsd <- optim(par = c(mu = 4, sigma = 0.5), fn = rmsd, data = data)
+fit_rmsd$par
+fit_rmsd$value
+```
+
+- `par`: our starting guess
+- `fn`: the function to minimize (Nelder-Mead is the default `method`, so we don't need to specify it)
+
+::: notes
+Run this live and compare to `best` from the grid search — they should be very close.
+:::
+
+------------------------------------------------------------------------
+
+## Limitations of parameter estimation
+
+**Getting stuck in a local minimum**
+
+Not every landscape looks like our psychometric-function example. Here's a synthetic (illustrative, not psychologically meaningful) example with a bumpier landscape:
+
+```{r}
+toy_cost <- function(x, y) (x - 3)^2 + (y + 1)^2 + 15 * sin(x) * cos(y)
+
+x_vals <- seq(-6, 10, length.out = 100)
+y_vals <- seq(-6, 6, length.out = 100)
+toy_grid <- expand.grid(x = x_vals, y = y_vals)
+toy_grid$cost <- with(toy_grid, toy_cost(x, y))
+
+levelplot(cost ~ x * y, data = toy_grid, main = "A landscape with multiple valleys")
+```
+
+- Several dark patches = several **local minima**; the single darkest patch overall is the **global minimum** — what we actually want
+- There's no guarantee that what `optim()` finds is the global minimum rather than a local one — this is true of essentially all parameter estimation methods, not just Simplex
+- One practical mitigation: run `optim()` several times from different starting values; if they all agree, that's good evidence you've found the global minimum
+
+**Struggling with many parameters**
+
+- Simplex becomes inefficient and unreliable with roughly 4 or more parameters
+- We'll meet methods much better suited to many-parameter models when we get to neural networks in a few weeks
+
+::: notes
+Keep the toy landscape framed explicitly as synthetic (made-up x,y, not our mu,sigma) so students don't think our psychometric model secretly has hidden local minima it doesn't have. The many-parameters point is a direct, honest hand-off to the neural network sessions, where gradient-based training methods that scale to far more parameters take over.
+:::
+
+------------------------------------------------------------------------
+
+## A different kind of question
+
+So far: "which parameters make my prediction closest to the data?"
+
+A related but different question:
+
+**"Which parameters make the data I actually observed most *probable*?"**
+
+This is maximum likelihood estimation (MLE).
+
+::: notes
+Slow down here — this is the conceptual pivot point of the lecture.
+:::
+
+------------------------------------------------------------------------
+
+## From simulating to evaluating
+
+`rbinom()` **generates** simulated data from known parameters — you'll see this used in the tutorial to build a dataset with known "true" values:
+
+```{r}
+rbinom(1, size = 40, prob = 0.8)  # parameters -> simulated data
+```
+
+`dbinom()` does the reverse — it **evaluates** how probable a specific outcome was, given parameters:
+
+```{r}
+dbinom(32, size = 40, prob = 0.8)  # data + parameters -> probability
+```
+
+- `rbinom`: parameters → data
+- `dbinom`: data + parameters → probability (what MLE needs)
+- Each "yes"/"no" trial in our psychometric experiment is exactly this kind of binomial event
+
+::: notes
+The tutorial introduces rbinom() properly when it shows students how to simulate their own dataset with known parameters, later in the practical — this slide just introduces dbinom() as its natural counterpart for the lecture's purposes.
+:::
+
+------------------------------------------------------------------------
+
+## A simple case: coin flips
+
+```{r}
+flips <- c(1, 0, 1, 1, 0, 1, 1, 1, 0, 1)  # 1 = heads, 10 flips, 7 heads
+sum(flips)
+```
+
+- If the coin's true heads-probability is `p`, how likely is *this exact sequence* of 10 flips?
+- Each flip is a small binomial event (`size = 1`); `dbinom()` gives us exactly that probability
+
+```{r}
+dbinom(sum(flips), size = 10, prob = 0.5)
+dbinom(sum(flips), size = 10, prob = 0.7)
+```
+
+::: notes
+Ask students to guess which probability they think is "more likely" before running the second line. Worth briefly noting that each intensity level in our psychometric data is the same kind of binomial count — just with size = 40 instead of size = 1 per observation.
+:::
+
+------------------------------------------------------------------------
+
+## The likelihood function
+
+```{r}
+p_vals <- seq(0.01, 0.99, by = 0.01)
+likelihood <- sapply(p_vals, function(p) dbinom(sum(flips), 10, p))
+
+plot(p_vals, likelihood, type = "l",
+     xlab = "Candidate p", ylab = "Likelihood of observed data")
+p_vals[which.max(likelihood)]
+```
+
+- The peak of this curve is the **maximum likelihood estimate**
+- It matches the intuitive answer: 7/10 = 0.7
+
+::: notes
+Point out that this plot has exactly the same shape/logic as the RMSD surface earlier, just flipped: we want the peak here instead of the valley.
+:::
+
+------------------------------------------------------------------------
+
+## Seeing likelihood as heights, not distances
+
+```{r}
+cand_good <- c(5, 1)     # a good-fitting guess
+cand_bad  <- c(3, 3)     # a poor-fitting guess
+
+lik_good <- dbinom(data$n_yes, data$n_trials,
+                    psychometric_model(cand_good[1], cand_good[2], data$intensity))
+lik_bad  <- dbinom(data$n_yes, data$n_trials,
+                    psychometric_model(cand_bad[1], cand_bad[2], data$intensity))
+
+barplot(rbind(lik_good, lik_bad), beside = TRUE, names.arg = data$intensity,
+        col = c("darkgreen", "red"), xlab = "Intensity",
+        ylab = "Probability of the observed count",
+        legend.text = c("Good-fitting mu,sigma", "Poor-fitting mu,sigma"))
+```
+
+- RMSD pictures *distance* (smaller is better)
+- Likelihood pictures *probability, one intensity level at a time* (taller is better)
+
+::: notes
+The green bars (good params) should visibly tower over the red bars (poor params) at most intensity levels. This slide gives the *per-point* view — the next slide zooms out to the *overall* view across all points at once, which is the number we actually want to maximize.
+:::
+
+------------------------------------------------------------------------
+
+## Seeing the *overall* likelihood
+
+Fitting doesn't care about one data point at a time — it cares about the **joint** probability of the whole dataset together. We get that by multiplying (or, in log terms, adding) the per-point values from the previous slide:
+
+```{r}
+loglik_good <- sum(log(lik_good))
+loglik_bad  <- sum(log(lik_bad))
+
+barplot(c("Good-fitting mu,sigma" = loglik_good, "Poor-fitting mu,sigma" = loglik_bad),
+        ylab = "Total log-likelihood across all intensities (higher = better)",
+        col = c("darkgreen", "red"))
+```
+
+- We add up *logged* probabilities rather than multiplying raw ones — raw probabilities are tiny numbers that quickly underflow to zero once you multiply many together, whereas logs turn that multiplication into a simple, well-behaved sum
+- Whichever parameter set gives the higher total log-likelihood is the better overall fit — exactly mirroring "whichever parameter set gives the lower RMSD" from earlier
+
+::: notes
+This closes the loop opened by the per-point bars slide: individual tall bars are nice, but what we actually optimize is the sum across every data point at once. Emphasize the log point isn't just a mathematical nicety — with real datasets of hundreds of trials, the raw joint probability becomes a number too small for a computer to represent accurately, so working in logs is a practical necessity, not just convention.
+:::
+
+------------------------------------------------------------------------
+
+## Back to the psychometric function
+
+- We don't have single yes/no flips at each intensity — we have counts (e.g., 29 out of 40 said "yes")
+- `dbinom()` still works, just with `size = n_trials`
+- We work with *log*-likelihood and *minimize* the negative log-likelihood (so we can keep using `optim()`, which minimizes by default)
+
+```{r}
+nll <- function(params, data) {
+  mu <- params[1]; sigma <- params[2]
+  predicted <- psychometric_model(mu, sigma, data$intensity)
+  predicted <- pmin(pmax(predicted, 1e-6), 1 - 1e-6)
+  -sum(dbinom(data$n_yes, data$n_trials, predicted, log = TRUE))
+}
+```
+
+::: notes
+The pmin/pmax line keeps predicted probabilities inside (0,1) to avoid numerical errors — housekeeping, not conceptually important, but flag it so students aren't confused in the tutorial when they see it in the code. Even though pnorm() mathematically stays within (0,1), extreme x values can round to exactly 0 or 1 in floating-point arithmetic, which would break log(0) inside dbinom() without this safety clamp.
+:::
+
+------------------------------------------------------------------------
+
+## Fitting by maximum likelihood
+
+```{r}
+fit_mle <- optim(par = c(mu = 4, sigma = 0.5), fn = nll, data = data)
+fit_mle$par
+fit_rmsd$par
+```
+
+- Two different logics (RMSD vs. likelihood), often very similar answers
+
+::: notes
+This comparison is the payoff of the whole lecture. If time allows, plot both fitted curves over the data points side by side — visually near-identical.
+:::
+
+------------------------------------------------------------------------
+
+## Summary
+
+- A model has parameters, and each parameter has a psychological meaning worth stating in words — here, threshold and spread of a cumulative normal, using the mean/SD framing you already know from statistics
+- The choice of S-shape (cumulative normal, Weibull, logistic) reflects different assumptions and priorities, not a single "correct" answer — the logistic version, in particular, is the same shape used inside neural network units later in the course
+- Data = model + error — that's why a fit is never perfect
+- RMSD → grid search → `optim()`'s default Nelder-Mead simplex, which tumbles downhill but can get stuck in a local minimum on harder landscapes, and doesn't scale well beyond about 3–4 parameters — both limitations we'll revisit when methods better suited to complex, many-parameter landscapes come up in the neural network sessions
+- Maximum likelihood asks a different question ("most probable data") but is solved the same way (minimize a function); `dbinom()` is the reverse of `rbinom()`, which you'll use in the tutorial to simulate your own dataset; the per-point view (bar heights) and the overall view (summed log-likelihood) are two zoom levels on the same idea
+- Next: the tutorial — you'll do all of this yourselves, simulate your own dataset with known parameters to check recovery, and finally compare today's cumulative normal model against the linear model you already know
+
+::: notes
+Close by pointing them to the tutorial handout. Flag that the tutorial's final exercise (linear vs. cumulative normal) has an extra payoff: a straight line has no way to respect the 0–1 probability bounds that a real psychometric function must, which gives students a very concrete, visual reason a model's *shape* matters beyond just its fit quality — nice bridge into Model Comparison later in the course.
+:::

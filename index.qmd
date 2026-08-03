@@ -1,0 +1,10 @@
+---
+title: "Course Materials"
+---
+
+Use the navigation bar above to view each lecture and practical.
+
+- **Lecture 1**: Intro to Data Science & Neural Networks
+- **Practical 2**: R Exercises II (+ solutions)
+- **Lecture 2**: Parameter Estimation
+- **Practical 3**: Parameter Estimation (+ solutions)

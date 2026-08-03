@@ -1,0 +1,25 @@
+project:
+  type: website
+
+website:
+  title: "Course Materials"
+  navbar:
+    left:
+      - text: "Home"
+        href: index.qmd
+      - text: "Lecture 1: Intro to Data Science & NN"
+        href: lecture1_intro_data_science_nn.qmd
+      - text: "Practical 2: R Exercises II"
+        href: practical2_r_exercises_ii.qmd
+      - text: "Practical 2 Solutions"
+        href: practical2_r_exercises_ii_solutions.qmd
+      - text: "Lecture 2: Parameter Estimation"
+        href: session1_lecture.qmd
+      - text: "Practical 3: Parameter Estimation"
+        href: session1_tutorial.qmd
+      - text: "Practical 3 Solutions"
+        href: practical3_parameter_estimation_solutions.qmd
+
+format:
+  html:
+    theme: cosmo
