@@ -48,27 +48,27 @@ $$y = a + b \cdot x$$
 
 ---
 
-## A concrete example: what did participants actually see?
+## Luminance spot detection
 
 ```{r}
 #| echo: false
-old_par <- par(bg = "black", mar = c(4, 1, 3, 1))
-plot(1, type = "n", xlim = c(0.5, 9.5), ylim = c(0, 2), axes = FALSE,
-     xlab = "", ylab = "", main = "")
-title("Stimulus intensity 1 (hardest to see) to 9 (easiest)", col.main = "white")
-intensities <- 1:9
-brightness <- seq(0.12, 1, length.out = 9)
-for (i in seq_along(intensities)) {
-  points(intensities[i], 1, pch = 19, cex = 4.5, col = gray(brightness[i]))
-}
+set.seed(42)
+n_spots <- 18
+spot_x <- runif(n_spots, 0.5, 9.5)
+spot_y <- runif(n_spots, 0.3, 1.7)
+spot_brightness <- runif(n_spots, 0.05, 1)
+
+old_par <- par(bg = "black", mar = c(2, 1, 3, 1))
+plot(1, type = "n", xlim = c(0, 10), ylim = c(0, 2), axes = FALSE, xlab = "", ylab = "")
+points(spot_x, spot_y, pch = 19, cex = 4, col = gray(spot_brightness))
 par(old_par)
 ```
 
 - Some spots barely differ from the black background — participants will often say "no" even when one was
   actually shown
 - Some are unmistakably brighter than the background — participants will almost always say "yes"
-- The interesting region is the middle, where the same physical stimulus gets a mix of "yes" and "no"
-  answers across trials
+- In a real experiment, we control the exact luminance of each spot systematically, and present many trials
+  at each level — next, one trial up close
 
 ::: {.notes}
 This is a schematic illustration, not photographs from an actual experiment — the point is to make the
@@ -153,8 +153,9 @@ This is the **Weibull cumulative distribution function** — see
 [Wikipedia: Weibull distribution](https://en.wikipedia.org/wiki/Weibull_distribution) for the full
 mathematical background.
 
-- `alpha` (scale): stretches or compresses the curve along the intensity axis
-- `beta` (shape): controls how sharply the curve rises
+- `alpha` (scale): a multiplicative scale parameter — rescales the intensity axis, which moves where the
+  curve reaches about 63% *and* proportionally stretches or compresses how wide the transition is
+- `beta` (shape): controls how sharply the curve rises, independent of where it sits
 
 ```{r}
 psychometric_model <- function(alpha, beta, x) {
@@ -222,15 +223,20 @@ legend("topleft", legend = c("alpha = 3", "alpha = 5", "alpha = 7"),
        col = c("red", "blue", "darkgreen"), lty = 1)
 ```
 
-- `alpha` shifts the whole curve left or right, without changing its overall steepness
-- A useful fixed point: no matter what `beta` is, the curve always reaches about **63%** at `x = alpha` (a
+- `alpha` is a **scale** parameter, not a pure shift: increasing it moves the curve right *and* stretches its
+  width — notice the three curves above aren't just shifted copies of each other, the alpha=7 curve is
+  visibly more gradual than the alpha=3 curve
+- A useful fixed point regardless of `beta`: the curve always reaches about **63%** at `x = alpha` (a
   property of the Weibull's mathematical form)
-- Psychologically: how sensitive the person is overall — a lower `alpha` means they detect fainter stimuli
+- Psychologically: how sensitive the person is overall — a lower `alpha` means they reach a given detection
+  level at a fainter stimulus
 
 ::: {.notes}
-Let students watch alpha and only alpha change; the three curves should look like shifted copies of each
-other. The 63% fact is worth stating explicitly (it comes from 1 - e^-1 ≈ 0.632) — it's the Weibull's
-analogue of "mu is the 50% point" for the cumulative normal, just a different fixed reference value.
+Let students watch alpha and only alpha change; unlike a pure location parameter, the curves here should
+visibly differ in width too, not just position — worth pausing on this since it's a genuine (and useful)
+contrast with the cumulative normal's mu, which really was a pure shift. The 63% fact is worth stating
+explicitly (it comes from 1 - e^-1 ≈ 0.632) — it's the Weibull's fixed reference point, playing a similar
+role to "mu is the 50% point" for the cumulative normal, just without the "no width change" guarantee.
 :::
 
 ---
@@ -398,9 +404,11 @@ best
 
 ```{r}
 library(lattice)
+cost_palette <- colorRampPalette(c("white", "steelblue", "midnightblue"))(100)
 levelplot(rmsd ~ alpha * beta, data = grid,
           main = "RMSD across parameter combinations",
-          xlab = "alpha (scale)", ylab = "beta (shape)")
+          xlab = "alpha (scale)", ylab = "beta (shape)",
+          col.regions = cost_palette)
 ```
 
 - Dark blue = low RMSD = good fit
@@ -466,7 +474,7 @@ When you call `optim()`, its default method is the **Nelder-Mead Simplex** algor
 
 ```{r}
 #| echo: false
-triangle <- rbind(c(2, 0.5), c(4, 1.5), c(3, 2))
+triangle <- rbind(c(2, 1), c(3, 0.3), c(1.5, 3))
 n_steps <- 7
 triangle_history <- vector("list", n_steps)
 triangle_history[[1]] <- triangle
@@ -475,13 +483,22 @@ for (step in 2:n_steps) {
   costs <- apply(triangle, 1, function(p) rmsd(p, data))
   worst <- which.max(costs)
   centroid <- colMeans(triangle[-worst, , drop = FALSE])
-  triangle[worst, ] <- centroid + (centroid - triangle[worst, ])
+  reflected <- centroid + (centroid - triangle[worst, ])
+  reflected_cost <- rmsd(reflected, data)
+  if (reflected_cost < costs[worst]) {
+    triangle[worst, ] <- reflected           # reflection improved things -- accept it
+  } else {
+    triangle[worst, ] <- centroid + 0.5 * (triangle[worst, ] - centroid)  # otherwise, contract instead
+  }
   triangle_history[[step]] <- triangle
 }
 
 rmsd_matrix <- matrix(grid$rmsd, nrow = length(alpha_vals), ncol = length(beta_vals))
-contour(alpha_vals, beta_vals, rmsd_matrix, xlab = "alpha", ylab = "beta",
-        main = "A simplex tumbling downhill on the real RMSD landscape")
+cost_palette <- colorRampPalette(c("white", "steelblue", "midnightblue"))(100)
+image(alpha_vals, beta_vals, rmsd_matrix, col = cost_palette,
+      xlab = "alpha (scale)", ylab = "beta (shape)",
+      main = "A simplex tumbling downhill on the real RMSD landscape")
+contour(alpha_vals, beta_vals, rmsd_matrix, add = TRUE, nlevels = 8)
 
 step_colors <- colorRampPalette(c("black", "red"))(n_steps)
 for (step in 1:n_steps) {
@@ -489,18 +506,22 @@ for (step in 1:n_steps) {
   polygon(tri[, 1], tri[, 2], border = step_colors[step], lwd = 2)
 }
 legend("topright", legend = c("Step 1 (black)", paste0("Step ", n_steps, " (red)")),
-       col = c("black", "red"), lty = 1, lwd = 2)
+       col = c("black", "red"), lty = 1, lwd = 2, bg = "white")
 ```
 
 ::: {.notes}
-This is the same RMSD landscape from the "Seeing the cost surface" slide, just redrawn as a contour plot so
-we can overlay the triangle on top of it (base R's contour() is easier to draw on than a lattice levelplot).
-The simplex here is a genuinely simulated sequence — each step reflects the worst corner through the
-centroid of the other two, the core Nelder-Mead move — evaluated using our actual rmsd() function on the
-real data, not a synthetic stand-in. It's simplified (no expansion/contraction/shrink steps, which the real
-algorithm also uses) but should visibly converge toward the same dark valley from the earlier levelplot,
-color-coded from black (step 1) to red (final step). The code itself isn't the point here — focus on the
-figure.
+This is the same RMSD landscape and color scale as the "Seeing the cost surface" slide, drawn with image() +
+contour() instead of a lattice levelplot so we can overlay the triangle on top of it. The simplex here is a
+genuinely simulated sequence, evaluated using our actual rmsd() function on the real data: each step either
+reflects the worst corner through the centroid of the other two (if that improves things) or contracts it
+halfway toward the centroid instead (if reflection would make things worse). That reflect-or-contract choice
+is the fix that keeps the sequence well-behaved — earlier versions that always accepted the reflection could
+overshoot and oscillate instead of cleanly converging. Between any two consecutive triangles shown, exactly
+one corner moves and the other two stay fixed — that's worth pointing out explicitly if students ask why two
+of the three points always line up between neighboring steps. It's still simplified relative to the full
+algorithm (no expansion step) but should visibly converge toward the same dark valley from the "Seeing the
+cost surface" slide, color-coded from black (step 1) to red (final step). The code itself isn't the point
+here — focus on the figure.
 :::
 
 ---
@@ -520,7 +541,7 @@ fit_rmsd$value
 - `par`: our starting guess
 - `fn`: the function to minimize
 - `method`: which search algorithm to use — defaults to `"Nelder-Mead"`, but can be set explicitly to
-  something else:
+  something else, e.g. `"BFGS"` (Broyden–Fletcher–Goldfarb–Shanno):
 
 ```r
 optim(par = c(alpha = 4, beta = 1), fn = rmsd, data = data, method = "BFGS")
