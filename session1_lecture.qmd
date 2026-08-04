@@ -51,7 +51,6 @@ $$y = a + b \cdot x$$
 ## Luminance spot detection
 
 ```{r}
-#| echo: false
 set.seed(42)
 n_spots <- 18
 spot_x <- runif(n_spots, 0.5, 9.5)
@@ -475,23 +474,39 @@ When you call `optim()`, its default method is the **Nelder-Mead Simplex** algor
 ```{r}
 #| echo: false
 triangle <- rbind(c(2, 1), c(3, 0.3), c(1.5, 3))
-n_steps <- 7
-triangle_history <- vector("list", n_steps)
-triangle_history[[1]] <- triangle
+triangle_history <- list(triangle)
+max_iter <- 60
+tol <- 1e-4
 
-for (step in 2:n_steps) {
+for (iter in 1:max_iter) {
   costs <- apply(triangle, 1, function(p) rmsd(p, data))
+  if (diff(range(costs)) < tol) break
+
   worst <- which.max(costs)
+  best  <- which.min(costs)
   centroid <- colMeans(triangle[-worst, , drop = FALSE])
+
   reflected <- centroid + (centroid - triangle[worst, ])
   reflected_cost <- rmsd(reflected, data)
+
   if (reflected_cost < costs[worst]) {
-    triangle[worst, ] <- reflected           # reflection improved things -- accept it
+    triangle[worst, ] <- reflected                        # reflection improved things -- accept it
   } else {
-    triangle[worst, ] <- centroid + 0.5 * (triangle[worst, ] - centroid)  # otherwise, contract instead
+    contracted <- centroid + 0.5 * (triangle[worst, ] - centroid)
+    contracted_cost <- rmsd(contracted, data)
+    if (contracted_cost < costs[worst]) {
+      triangle[worst, ] <- contracted                      # contraction improved things -- accept it
+    } else {
+      best_point <- triangle[best, ]                       # neither helped -- shrink the whole triangle
+      for (i in 1:3) {
+        triangle[i, ] <- best_point + 0.5 * (triangle[i, ] - best_point)
+      }
+    }
   }
-  triangle_history[[step]] <- triangle
+  triangle_history[[length(triangle_history) + 1]] <- triangle
 }
+
+n_steps <- length(triangle_history)
 
 rmsd_matrix <- matrix(grid$rmsd, nrow = length(alpha_vals), ncol = length(beta_vals))
 cost_palette <- colorRampPalette(c("white", "steelblue", "midnightblue"))(100)
@@ -505,23 +520,24 @@ for (step in 1:n_steps) {
   tri <- triangle_history[[step]]
   polygon(tri[, 1], tri[, 2], border = step_colors[step], lwd = 2)
 }
-legend("topright", legend = c("Step 1 (black)", paste0("Step ", n_steps, " (red)")),
+legend("topright", legend = c("Step 1 (black)", paste0("Step ", n_steps, " (red, converged)")),
        col = c("black", "red"), lty = 1, lwd = 2, bg = "white")
 ```
 
 ::: {.notes}
 This is the same RMSD landscape and color scale as the "Seeing the cost surface" slide, drawn with image() +
 contour() instead of a lattice levelplot so we can overlay the triangle on top of it. The simplex here is a
-genuinely simulated sequence, evaluated using our actual rmsd() function on the real data: each step either
-reflects the worst corner through the centroid of the other two (if that improves things) or contracts it
-halfway toward the centroid instead (if reflection would make things worse). That reflect-or-contract choice
-is the fix that keeps the sequence well-behaved — earlier versions that always accepted the reflection could
-overshoot and oscillate instead of cleanly converging. Between any two consecutive triangles shown, exactly
-one corner moves and the other two stay fixed — that's worth pointing out explicitly if students ask why two
-of the three points always line up between neighboring steps. It's still simplified relative to the full
-algorithm (no expansion step) but should visibly converge toward the same dark valley from the "Seeing the
-cost surface" slide, color-coded from black (step 1) to red (final step). The code itself isn't the point
-here — focus on the figure.
+genuinely simulated sequence, evaluated using our actual rmsd() function on the real data, and now runs until
+it actually converges (the triangle's three corners agree to within a small tolerance) rather than stopping
+after a fixed number of steps — so the exact number of steps shown will vary depending on the data and
+starting triangle. Each step tries, in order: reflect the worst corner through the centroid of the other two;
+if that doesn't help, contract it halfway toward the centroid instead; if even that doesn't help, shrink the
+whole triangle toward its best corner. Most steps only move one corner (reflection or contraction), but a
+shrink step moves all three at once — worth mentioning if a sharp-eyed student asks why two corners don't
+match between every single pair of neighboring steps. This is still a simplified version of the full
+algorithm (no expansion step for a very promising reflection), but it should now reliably converge all the
+way into the same dark valley from the "Seeing the cost surface" slide, color-coded from black (step 1) to
+red (the final, converged step). The code itself isn't the point here — focus on the figure.
 :::
 
 ---
@@ -561,7 +577,6 @@ Not every landscape looks like our psychometric-function example. Here's a synth
 psychologically meaningful) example with a bumpier landscape:
 
 ```{r}
-#| echo: false
 toy_cost <- function(x, y) (x - 3)^2 + (y + 1)^2 + 15 * sin(x) * cos(y)
 
 x_vals <- seq(-6, 10, length.out = 100)
