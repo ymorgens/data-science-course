@@ -167,10 +167,6 @@ data_sim <- data.frame(intensity = intensity_sim, n_yes = n_yes_sim,
 
 ## Question 8
 
-No single correct answer — an eyeballing exercise, same as Question 1.
-
-## Question 9
-
 ```{r}
 fit_sim <- optim(par = c(alpha = 4, beta = 1), fn = rmsd, data = data_sim)
 fit_sim$par
@@ -179,7 +175,7 @@ fit_sim$par
 You should get an estimate somewhere close to `alpha ≈ 4, beta ≈ 2` (exact values will vary a little
 depending on your random seed and starting values, which is fine).
 
-## Question 10
+## Question 9
 
 ```{r}
 c(true_alpha = true_alpha, true_beta = true_beta)
@@ -187,11 +183,9 @@ fit_sim$par
 ```
 
 Your fit should sit close to the true values — a satisfying confirmation that the fitting method actually
-recovers the parameters that generated the data, when there's noise involved but the underlying model is
-correct. Your Question 8 eyeball guess was probably in the right neighborhood but visibly less accurate than
-`optim()`'s fit — the same lesson as Question 5, just now with a ground truth to check against directly.
+recovers the parameters that generated the data, even with the trial-to-trial noise `rbinom()` adds on top.
 
-## Question 11
+## Question 10
 
 ```{r}
 plot(data_sim$intensity, data_sim$prop_yes, pch = 19,
@@ -207,7 +201,7 @@ or the plot and the `lines()` call ended up in separate chunks that were run out
 needs an existing `plot()` to draw onto, so re-run them together in one go if this happens. Once it works,
 the fitted curve should pass closely through your observed points.
 
-## Question 12 (interpretation)
+## Question 11 (interpretation)
 
 Comparing `alpha ≈ 4` for this simulated participant to `alpha ≈ 5` for the Part 0–3 participant: this
 participant has a **lower scale**, meaning they reach a given detection level at a lower intensity — they're
@@ -216,6 +210,18 @@ meaning their transition is slightly more gradual — somewhat less reliable/pre
 threshold. The two parameters have separate, interpretable psychological meanings (overall sensitivity vs.
 reliability of responding) — worth keeping in mind, since this distinction matters again when comparing
 parameters across conditions or groups in later sessions.
+
+## Question 12 (extension)
+
+There's no single expected answer here since it depends on what values were tried, but a few things tend to
+show up. Recovery generally still works well for most reasonable choices — that's the main point of the
+exercise. It tends to get visibly worse in a couple of situations: very small `alpha` combined with the
+fixed intensity range 1–9 (if the curve is already near 1 for every intensity tested, there's very little
+information left in the data about exactly where the curve rises, so many different `(alpha, beta)`
+combinations fit almost equally well); and very small `beta` (a very shallow, gradual curve can look similar
+to a wide range of other shallow curves across a limited intensity range, again making the fit less
+precise). Both cases connect back to the lecture's discussion of "wide, flat valleys" in the RMSD landscape —
+recovery struggles most exactly when the data no longer pins down a single clear minimum.
 
 ## Part 5: Does the shape of the model matter?
 

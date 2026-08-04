@@ -145,11 +145,7 @@ parameters first, to check that your fitting methods actually recover the truth 
 data. Here's how, using the same `rbinom()` function from Practical 2, together with the Weibull formula from
 `psychometric_model()` to generate the underlying probabilities.
 
-The generating code below is hidden — you'll only see the resulting table and plot, just as you would with a
-real participant, but this time the true parameters get revealed once you've made a guess and fit the model.
-
 ```{r}
-#| echo: false
 set.seed(99)
 intensity_sim <- 1:9
 true_alpha <- 4
@@ -162,18 +158,19 @@ prop_yes_sim <- n_yes_sim / n_trials_sim
 
 data_sim <- data.frame(intensity = intensity_sim, n_yes = n_yes_sim,
                         n_trials = n_trials_sim, prop_yes = prop_yes_sim)
-invisible(NULL)
+data_sim
 ```
 
 ```{r}
-data_sim
 plot(data_sim$intensity, data_sim$prop_yes, pch = 19,
      xlab = "Stimulus intensity", ylab = "Proportion 'yes' responses", ylim = c(0, 1))
 ```
 
-**Question 8.** Just by eye, guess `alpha` and `beta` for `data_sim`.
+This is the general pattern for simulating any dataset: pick true parameter values, feed them into your model
+to get predicted probabilities, then use `rbinom()` to add realistic trial-to-trial noise on top of those
+predictions.
 
-**Question 9.** Using either `rmsd()` + `optim()`, or `nll()` + `optim()` (your choice), fit the
+**Question 8.** Using either `rmsd()` + `optim()`, or `nll()` + `optim()` (your choice), fit the
 psychometric model to `data_sim`. Report your estimated `alpha` and `beta`.
 
 ```{r}
@@ -181,17 +178,11 @@ psychometric model to `data_sim`. Report your estimated `alpha` and `beta`.
 
 ```
 
-**Question 10.** Now that you've fit the model, here are the true parameters used to generate `data_sim`:
+**Question 9.** Compare your fitted `alpha` and `beta` to `true_alpha` and `true_beta` in the chunk above.
+How close is the recovered estimate to the parameters that actually generated the data?
 
-```{r}
-c(true_alpha = true_alpha, true_beta = true_beta)
-```
-
-Compare your fit to these true values. How close is it? How close was your Question 8 eyeball guess, in
-comparison?
-
-**Question 11.** Plot the fitted curve on top of `data_sim`. Here's a scaffold to get you started — replace
-the two blanks with your fitted `alpha` and `beta` from Question 9 (e.g. `fit_sim$par[1]` and
+**Question 10.** Plot the fitted curve on top of `data_sim`. Here's a scaffold to get you started — replace
+the two blanks with your fitted `alpha` and `beta` from Question 8 (e.g. `fit_sim$par[1]` and
 `fit_sim$par[2]`, assuming you called your fitted object `fit_sim`):
 
 ```{r}
@@ -204,12 +195,20 @@ x_seq <- seq(0, 9, length.out = 200)
 
 If the line doesn't appear, double check: (1) the `lines()` call above is uncommented (no `#` in front), (2)
 you've replaced both blanks with actual numbers or variable references, and (3) you ran the fit in Question
-9 in the same session, so the object you're referencing still exists.
+8 in the same session, so the object you're referencing still exists.
 
-**Question 12 (interpretation).** In plain psychological language (not equations), what do this simulated
+**Question 11 (interpretation).** In plain psychological language (not equations), what do this simulated
 participant's `alpha` and `beta` tell you about their sensitivity, compared to the participant from Part
 0–3? Does this participant have a higher or lower scale (sensitivity), a sharper or shakier transition, or
 some combination?
+
+**Question 12 (extension).** Since you can see (and edit) the simulation code above, try changing
+`true_alpha` and/or `true_beta` to values of your own choosing — pick something quite different from 4 and 2
+(e.g. a much lower `alpha`, or a very shallow or very steep `beta`) — then re-run that chunk and repeat
+Questions 8–10 on your new dataset. Does your fitting procedure still recover your chosen values accurately?
+Are there any combinations where recovery seems to work noticeably less well, and if so, what do you think
+might be going on (hint: think back to the lecture's discussion of what makes a landscape easy or hard to
+search)?
 
 ## Part 5: Does the shape of the model matter?
 
