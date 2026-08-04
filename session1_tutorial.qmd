@@ -13,8 +13,8 @@ execute:
 
 This tutorial uses the same psychometric-function dataset from the lecture. You'll rebuild the grid search
 and `optim()` fits yourself, then learn how a dataset like this could be simulated with known parameters (so
-you can check whether your methods recover the truth), and finally compare today's cumulative normal model
-against the linear model you already know from statistics.
+you can check whether your methods recover the truth), and finally compare today's Weibull model against
+the linear model you already know from statistics.
 
 You don't need to understand every line of R syntax perfectly — focus on understanding *what each step is
 doing conceptually*. If something errors, re-check you've run all the chunks above it in order.
@@ -27,7 +27,7 @@ no "true" underlying parameter values to reveal here, just like with a real part
 ```{r}
 intensity <- 1:9
 n_trials <- rep(40, 9)
-n_yes <- c(1, 4, 5, 11, 19, 24, 35, 38, 39)
+n_yes <- c(0, 4, 8, 16, 25, 28, 37, 39, 40)
 prop_yes <- n_yes / n_trials
 
 data <- data.frame(intensity, n_yes, n_trials, prop_yes)
@@ -35,8 +35,11 @@ data
 ```
 
 ```{r}
-psychometric_model <- function(mu, sigma, x) {
-  pnorm(x, mean = mu, sd = sigma)
+psychometric_model <- function(alpha, beta, x) {
+  y <- rep(0, length(x))
+  valid <- x >= 0
+  y[valid] <- 1 - exp(-(x[valid] / alpha)^beta)
+  y
 }
 
 plot(data$intensity, data$prop_yes, pch = 19,
@@ -44,17 +47,17 @@ plot(data$intensity, data$prop_yes, pch = 19,
      ylim = c(0, 1))
 ```
 
-**Question 1.** Just by looking at the table and plot above, roughly guess values of `mu` (where the curve
-crosses 50%) and `sigma` (how gradually it rises). Write your guesses down; you'll compare them to a proper
-fit shortly.
+**Question 1.** Just by looking at the table and plot above, roughly guess values of `alpha` (scale — where
+the curve is around 63%) and `beta` (shape — how sharply it rises). Write your guesses down; you'll compare
+them to a proper fit shortly.
 
 ## Part 1: Grid search by hand
 
 ```{r}
 rmsd <- function(params, data) {
-  mu <- params[1]
-  sigma <- params[2]
-  predicted <- psychometric_model(mu, sigma, data$intensity)
+  alpha <- params[1]
+  beta <- params[2]
+  predicted <- psychometric_model(alpha, beta, data$intensity)
   sqrt(mean((data$prop_yes - predicted)^2))
 }
 ```
@@ -63,16 +66,16 @@ rmsd <- function(params, data) {
 guesses of your choice. Which has the lowest RMSD?
 
 ```{r}
-# Try it here: rmsd(c(mu_guess, sigma_guess), data)
+# Try it here: rmsd(c(alpha_guess, beta_guess), data)
 
 ```
 
 Now do a full grid search:
 
 ```{r}
-mu_vals <- seq(1, 9, length.out = 100)
-sigma_vals <- seq(0.1, 3, length.out = 100)
-grid <- expand.grid(mu = mu_vals, sigma = sigma_vals)
+alpha_vals <- seq(1, 9, length.out = 100)
+beta_vals <- seq(0.1, 6, length.out = 100)
+grid <- expand.grid(alpha = alpha_vals, beta = beta_vals)
 grid$rmsd <- apply(grid, 1, function(row) rmsd(row, data))
 
 best <- grid[which.min(grid$rmsd), ]
@@ -81,7 +84,7 @@ best
 
 ```{r}
 library(lattice)
-levelplot(rmsd ~ mu * sigma, data = grid, xlab = "mu (threshold)", ylab = "sigma (spread)")
+levelplot(rmsd ~ alpha * beta, data = grid, xlab = "alpha (scale)", ylab = "beta (shape)")
 ```
 
 **Question 3.** How close was your eyeballed guess to the grid search result? What does the dark "valley"
@@ -90,15 +93,15 @@ region in the plot represent?
 ## Part 2: Automatic search with `optim()`
 
 ```{r}
-fit_rmsd <- optim(par = c(mu = 4, sigma = 0.5), fn = rmsd, data = data)
+fit_rmsd <- optim(par = c(alpha = 4, beta = 1), fn = rmsd, data = data)
 fit_rmsd$par
 ```
 
-**Question 4.** Change the starting guess (the `par` argument) to something far off, e.g. `c(mu = 1, sigma =
-2.9)`, and re-run. Does `optim()` still find (roughly) the same answer? Try a really extreme starting guess
-— can you get it to fail or get stuck? (Recall from the lecture: `optim()`'s default method is Nelder-Mead
-simplex, which can in principle get stuck in a local minimum — though for this particular two-parameter
-problem, the RMSD surface has only one clean valley, so it's unlikely to happen here.)
+**Question 4.** Change the starting guess (the `par` argument) to something far off, e.g. `c(alpha = 1,
+beta = 5.5)`, and re-run. Does `optim()` still find (roughly) the same answer? Try a really extreme starting
+guess — can you get it to fail or get stuck? (Recall from the lecture: `optim()`'s default method is
+Nelder-Mead simplex, which can in principle get stuck in a local minimum — though for this particular
+two-parameter problem, the RMSD surface has only one clean valley, so it's unlikely to happen here.)
 
 ```{r}
 # Try alternative starting values here
@@ -114,13 +117,13 @@ don't have a ground truth to compare to.)
 
 ```{r}
 nll <- function(params, data) {
-  mu <- params[1]; sigma <- params[2]
-  predicted <- psychometric_model(mu, sigma, data$intensity)
+  alpha <- params[1]; beta <- params[2]
+  predicted <- psychometric_model(alpha, beta, data$intensity)
   predicted <- pmin(pmax(predicted, 1e-6), 1 - 1e-6)
   -sum(dbinom(data$n_yes, data$n_trials, predicted, log = TRUE))
 }
 
-fit_mle <- optim(par = c(mu = 4, sigma = 0.5), fn = nll, data = data)
+fit_mle <- optim(par = c(alpha = 4, beta = 1), fn = nll, data = data)
 fit_mle$par
 ```
 
@@ -139,8 +142,8 @@ cases? RMSD treats every miss the same regardless of where it happens; does like
 
 So far you've worked with a fixed dataset. In real research, it's common to simulate data from known
 parameters first, to check that your fitting methods actually recover the truth before trusting them on real
-data. Here's how, using the same `rbinom()` function from Practical 2, together with `pnorm()` to generate
-the underlying probabilities.
+data. Here's how, using the same `rbinom()` function from Practical 2, together with the Weibull formula from
+`psychometric_model()` to generate the underlying probabilities.
 
 The generating code below is hidden — you'll only see the resulting table and plot, just as you would with a
 real participant, but this time the true parameters get revealed once you've made a guess and fit the model.
@@ -149,9 +152,9 @@ real participant, but this time the true parameters get revealed once you've mad
 #| echo: false
 set.seed(99)
 intensity_sim <- 1:9
-true_mu <- 4
-true_sigma <- 1.3
-p_true <- pnorm(intensity_sim, mean = true_mu, sd = true_sigma)
+true_alpha <- 4
+true_beta <- 2
+p_true <- psychometric_model(true_alpha, true_beta, intensity_sim)
 
 n_trials_sim <- rep(40, 9)
 n_yes_sim <- rbinom(length(intensity_sim), n_trials_sim, p_true)
@@ -168,10 +171,10 @@ plot(data_sim$intensity, data_sim$prop_yes, pch = 19,
      xlab = "Stimulus intensity", ylab = "Proportion 'yes' responses", ylim = c(0, 1))
 ```
 
-**Question 8.** Just by eye, guess `mu` and `sigma` for `data_sim`.
+**Question 8.** Just by eye, guess `alpha` and `beta` for `data_sim`.
 
 **Question 9.** Using either `rmsd()` + `optim()`, or `nll()` + `optim()` (your choice), fit the
-psychometric model to `data_sim`. Report your estimated `mu` and `sigma`.
+psychometric model to `data_sim`. Report your estimated `alpha` and `beta`.
 
 ```{r}
 # Your fit here
@@ -181,21 +184,21 @@ psychometric model to `data_sim`. Report your estimated `mu` and `sigma`.
 **Question 10.** Now that you've fit the model, here are the true parameters used to generate `data_sim`:
 
 ```{r}
-c(true_mu = true_mu, true_sigma = true_sigma)
+c(true_alpha = true_alpha, true_beta = true_beta)
 ```
 
 Compare your fit to these true values. How close is it? How close was your Question 8 eyeball guess, in
 comparison?
 
 **Question 11.** Plot the fitted curve on top of `data_sim`. Here's a scaffold to get you started — replace
-the two blanks with your fitted `mu` and `sigma` from Question 9 (e.g. `fit_sim$par[1]` and
+the two blanks with your fitted `alpha` and `beta` from Question 9 (e.g. `fit_sim$par[1]` and
 `fit_sim$par[2]`, assuming you called your fitted object `fit_sim`):
 
 ```{r}
 plot(data_sim$intensity, data_sim$prop_yes, pch = 19,
      xlab = "Stimulus intensity", ylab = "Proportion 'yes' responses", ylim = c(0, 1))
 
-x_seq <- seq(1, 9, length.out = 200)
+x_seq <- seq(0, 9, length.out = 200)
 # lines(x_seq, psychometric_model(___, ___, x_seq), col = "blue")
 ```
 
@@ -204,15 +207,15 @@ you've replaced both blanks with actual numbers or variable references, and (3) 
 9 in the same session, so the object you're referencing still exists.
 
 **Question 12 (interpretation).** In plain psychological language (not equations), what do this simulated
-participant's `mu` and `sigma` tell you about their sensitivity, compared to the participant from Part 0–3?
-Does this participant have a higher or lower threshold, a sharper or shakier transition, or some combination?
+participant's `alpha` and `beta` tell you about their sensitivity, compared to the participant from Part
+0–3? Does this participant have a higher or lower scale (sensitivity), a sharper or shakier transition, or
+some combination?
 
 ## Part 5: Does the shape of the model matter?
 
-So far we've assumed detection follows a cumulative normal curve. But you already know a simpler model from
-your statistics background: a straight line, $y = a + b \cdot x$. Let's see how well it does on the **same
-data from Part 0–3** (the `data` object), compared to the cumulative normal model you already fit
-(`fit_rmsd`).
+So far we've assumed detection follows a Weibull curve. But you already know a simpler model from your
+statistics background: a straight line, $y = a + b \cdot x$. Let's see how well it does on the **same data
+from Part 0–3** (the `data` object), compared to the Weibull model you already fit (`fit_rmsd`).
 
 This part is more independent than the previous ones — you're writing the functions from scratch, based on
 the pattern of `psychometric_model()` and `rmsd()` you've already used, rather than adapting code that's
@@ -241,12 +244,11 @@ using `linear_model()` instead of `psychometric_model()`.
 
 ```
 
-**Question 16.** Compare the RMSD of your linear fit to the RMSD of the cumulative normal fit
-(`fit_rmsd$value`). Which model achieves a lower RMSD on this data?
+**Question 16.** Compare the RMSD of your linear fit to the RMSD of the Weibull fit (`fit_rmsd$value`).
+Which model achieves a lower RMSD on this data?
 
-**Question 17.** Plot `data` again, and overlay *both* fitted curves (cumulative normal in one color, linear
-in another) using `lines()`. Visually, where do the two models agree, and where do they most clearly
-diverge?
+**Question 17.** Plot `data` again, and overlay *both* fitted curves (Weibull in one color, linear in
+another) using `lines()`. Visually, where do the two models agree, and where do they most clearly diverge?
 
 ```{r}
 # Your plot here

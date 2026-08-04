@@ -15,18 +15,21 @@ execute:
 ```{r}
 intensity <- 1:9
 n_trials <- rep(40, 9)
-n_yes <- c(1, 4, 5, 11, 19, 24, 35, 38, 39)
+n_yes <- c(0, 4, 8, 16, 25, 28, 37, 39, 40)
 prop_yes <- n_yes / n_trials
 
 data <- data.frame(intensity, n_yes, n_trials, prop_yes)
 
-psychometric_model <- function(mu, sigma, x) {
-  pnorm(x, mean = mu, sd = sigma)
+psychometric_model <- function(alpha, beta, x) {
+  y <- rep(0, length(x))
+  valid <- x >= 0
+  y[valid] <- 1 - exp(-(x[valid] / alpha)^beta)
+  y
 }
 
 rmsd <- function(params, data) {
-  mu <- params[1]; sigma <- params[2]
-  predicted <- psychometric_model(mu, sigma, data$intensity)
+  alpha <- params[1]; beta <- params[2]
+  predicted <- psychometric_model(alpha, beta, data$intensity)
   sqrt(mean((data$prop_yes - predicted)^2))
 }
 ```
@@ -34,34 +37,34 @@ rmsd <- function(params, data) {
 ## Question 1
 
 There's no single correct numeric answer here — it's an eyeballing exercise. A reasonable guess from looking
-at the plot: `mu` somewhere around 4–6 (wherever the curve visually crosses 50%), and `sigma` somewhere
-around 0.5–1.5 (a moderately gradual, not extremely sharp or shallow, transition). This is just a benchmark
-to compare against later — don't worry about whether your guess was "right."
+at the plot: `alpha` somewhere around 4–6 (wherever the curve looks like it's around 60-ish%), and `beta`
+somewhere around 2–4 (a moderately gradual, not extremely sharp or shallow, transition). This is just a
+benchmark to compare against later — don't worry about whether your guess was "right."
 
 ## Question 2
 
 ```{r}
-rmsd(c(5, 1), data)     # a plausible guess
-rmsd(c(2, 3), data)     # a clearly worse guess
-rmsd(c(5, 0.9), data)   # another plausible guess
+rmsd(c(5, 3), data)     # a plausible guess
+rmsd(c(2, 5), data)     # a clearly worse guess
+rmsd(c(5, 2.5), data)   # another plausible guess
 ```
 
-You should find that guesses closer to `mu ≈ 5, sigma ≈ 1` give a lower RMSD. Try your own Question-1 guess
-in the same way and see how it scores.
+You should find that guesses closer to `alpha ≈ 5, beta ≈ 3` give a lower RMSD. Try your own Question-1
+guess in the same way and see how it scores.
 
 ## Question 3
 
 ```{r}
-mu_vals <- seq(1, 9, length.out = 100)
-sigma_vals <- seq(0.1, 3, length.out = 100)
-grid <- expand.grid(mu = mu_vals, sigma = sigma_vals)
+alpha_vals <- seq(1, 9, length.out = 100)
+beta_vals <- seq(0.1, 6, length.out = 100)
+grid <- expand.grid(alpha = alpha_vals, beta = beta_vals)
 grid$rmsd <- apply(grid, 1, function(row) rmsd(row, data))
 best <- grid[which.min(grid$rmsd), ]
 best
 ```
 
 Your eyeballed guess was probably in the right neighborhood but not exact — grid search finds a combination
-close to `mu ≈ 5, sigma ≈ 1`. The dark "valley" in the `levelplot` is the region of `(mu, sigma)`
+close to `alpha ≈ 5, beta ≈ 3`. The dark "valley" in the `levelplot` is the region of `(alpha, beta)`
 combinations that all produce a similarly low RMSD — i.e., curves that are all roughly compatible with the
 data. It's worth noticing that this valley has some width to it, not just a single point — that's a preview
 of identifiability issues you'll meet again with more complex models.
@@ -69,7 +72,7 @@ of identifiability issues you'll meet again with more complex models.
 ## Question 4
 
 ```{r}
-fit_extreme <- optim(par = c(mu = 1, sigma = 2.9), fn = rmsd, data = data)
+fit_extreme <- optim(par = c(alpha = 1, beta = 5.5), fn = rmsd, data = data)
 fit_extreme$par
 ```
 
@@ -83,7 +86,7 @@ values is a good habit to build now.
 ## Question 5
 
 ```{r}
-fit_rmsd <- optim(par = c(mu = 4, sigma = 0.5), fn = rmsd, data = data)
+fit_rmsd <- optim(par = c(alpha = 4, beta = 1), fn = rmsd, data = data)
 fit_rmsd$par
 ```
 
@@ -98,13 +101,13 @@ answer.
 
 ```{r}
 nll <- function(params, data) {
-  mu <- params[1]; sigma <- params[2]
-  predicted <- psychometric_model(mu, sigma, data$intensity)
+  alpha <- params[1]; beta <- params[2]
+  predicted <- psychometric_model(alpha, beta, data$intensity)
   predicted <- pmin(pmax(predicted, 1e-6), 1 - 1e-6)
   -sum(dbinom(data$n_yes, data$n_trials, predicted, log = TRUE))
 }
 
-fit_mle <- optim(par = c(mu = 4, sigma = 0.5), fn = nll, data = data)
+fit_mle <- optim(par = c(alpha = 4, beta = 1), fn = nll, data = data)
 fit_mle$par
 fit_rmsd$par
 ```
@@ -150,9 +153,9 @@ MLE has when its assumptions do hold.
 ```{r}
 set.seed(99)
 intensity_sim <- 1:9
-true_mu <- 4
-true_sigma <- 1.3
-p_true <- pnorm(intensity_sim, mean = true_mu, sd = true_sigma)
+true_alpha <- 4
+true_beta <- 2
+p_true <- psychometric_model(true_alpha, true_beta, intensity_sim)
 
 n_trials_sim <- rep(40, 9)
 n_yes_sim <- rbinom(length(intensity_sim), n_trials_sim, p_true)
@@ -169,17 +172,17 @@ No single correct answer — an eyeballing exercise, same as Question 1.
 ## Question 9
 
 ```{r}
-fit_sim <- optim(par = c(mu = 4, sigma = 0.5), fn = rmsd, data = data_sim)
+fit_sim <- optim(par = c(alpha = 4, beta = 1), fn = rmsd, data = data_sim)
 fit_sim$par
 ```
 
-You should get an estimate somewhere close to `mu ≈ 4, sigma ≈ 1.3` (exact values will vary a little
+You should get an estimate somewhere close to `alpha ≈ 4, beta ≈ 2` (exact values will vary a little
 depending on your random seed and starting values, which is fine).
 
 ## Question 10
 
 ```{r}
-c(true_mu = true_mu, true_sigma = true_sigma)
+c(true_alpha = true_alpha, true_beta = true_beta)
 fit_sim$par
 ```
 
@@ -194,7 +197,7 @@ correct. Your Question 8 eyeball guess was probably in the right neighborhood bu
 plot(data_sim$intensity, data_sim$prop_yes, pch = 19,
      xlab = "Stimulus intensity", ylab = "Proportion 'yes' responses", ylim = c(0, 1))
 
-x_seq <- seq(1, 9, length.out = 200)
+x_seq <- seq(0, 9, length.out = 200)
 lines(x_seq, psychometric_model(fit_sim$par[1], fit_sim$par[2], x_seq), col = "blue")
 ```
 
@@ -206,13 +209,13 @@ the fitted curve should pass closely through your observed points.
 
 ## Question 12 (interpretation)
 
-Comparing `mu ≈ 4` for this simulated participant to `mu ≈ 5` for the Part 0–3 participant: this participant
-has a **lower threshold**, meaning they detect fainter stimuli — they're more sensitive overall. Their
-estimated `sigma` (≈1.3) is a bit larger than the Part 0–3 participant's (≈1), meaning their transition is
-slightly more gradual — somewhat less reliable/precise responding around threshold. The two parameters have
-separate, interpretable psychological meanings (overall sensitivity vs. reliability of responding) — worth
-keeping in mind, since this distinction matters again when comparing parameters across conditions or groups
-in later sessions.
+Comparing `alpha ≈ 4` for this simulated participant to `alpha ≈ 5` for the Part 0–3 participant: this
+participant has a **lower scale**, meaning they reach a given detection level at a lower intensity — they're
+more sensitive overall. Their estimated `beta` (≈2) is a bit lower than the Part 0–3 participant's (≈3),
+meaning their transition is slightly more gradual — somewhat less reliable/precise responding around
+threshold. The two parameters have separate, interpretable psychological meanings (overall sensitivity vs.
+reliability of responding) — worth keeping in mind, since this distinction matters again when comparing
+parameters across conditions or groups in later sessions.
 
 ## Part 5: Does the shape of the model matter?
 
@@ -252,10 +255,10 @@ fit_linear$value
 fit_rmsd$value
 ```
 
-On this dataset, the cumulative normal model's RMSD is typically somewhat lower than the linear model's,
-though the difference may be less dramatic than you'd expect over the *middle* of the intensity range, where
-a straight line can approximate an S-curve reasonably well. The real story shows up visually in Question 17,
-not just in the single RMSD number.
+On this dataset, the Weibull model's RMSD is typically somewhat lower than the linear model's, though the
+difference may be less dramatic than you'd expect over the *middle* of the intensity range, where a straight
+line can approximate an S-curve reasonably well. The real story shows up visually in Question 17, not just
+in the single RMSD number.
 
 **Question 17.**
 
@@ -263,11 +266,11 @@ not just in the single RMSD number.
 plot(data$intensity, data$prop_yes, pch = 19, ylim = c(-0.2, 1.2),
      xlab = "Intensity", ylab = "Proportion 'yes' responses")
 
-x_seq <- seq(1, 9, length.out = 200)
+x_seq <- seq(0, 9, length.out = 200)
 lines(x_seq, psychometric_model(fit_rmsd$par[1], fit_rmsd$par[2], x_seq), col = "darkgreen")
 lines(x_seq, linear_model(fit_linear$par[1], fit_linear$par[2], x_seq), col = "blue")
 abline(h = c(0, 1), lty = "dotted")
-legend("topleft", legend = c("Cumulative normal fit", "Linear fit"),
+legend("topleft", legend = c("Weibull fit", "Linear fit"),
        col = c("darkgreen", "blue"), lty = 1)
 ```
 
@@ -278,9 +281,9 @@ reasonably well through the middle intensities, but diverge clearly at the low a
 **Question 18 (discussion).** Check the linear model's prediction at the extremes: at `intensity = 1`, the
 linear fit will typically predict a proportion *below* 0 (a negative "probability" of responding yes), and at
 `intensity = 9` it will often predict a proportion *above* 1. Both are impossible for something that has to
-be a proportion between 0 and 1. The cumulative normal model, by construction, can never do this — it
-smoothly approaches (but never crosses) 0 and 1 at the extremes, which is exactly why S-shaped functions are
-the standard choice for this kind of bounded data. This is a good example of a model being flexible enough to
-track the *observed* data reasonably well while still making an implausible prediction outside that
-comfortable middle range — precisely the kind of issue formal model comparison methods (Weeks 6–7) are built
-to catch systematically, rather than relying on eyeballing a plot.
+be a proportion between 0 and 1. The Weibull model, by construction, can never do this — it smoothly
+approaches (but never crosses) 0 and 1, and is undefined below x = 0, which is exactly why bounded S-shaped
+functions are the standard choice for this kind of data. This is a good example of a model being flexible
+enough to track the *observed* data reasonably well while still making an implausible prediction outside
+that comfortable middle range — precisely the kind of issue formal model comparison methods (Weeks 6–7) are
+built to catch systematically, rather than relying on eyeballing a plot.
