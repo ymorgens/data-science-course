@@ -479,7 +479,6 @@ Deliberately pick one good fit and three clearly bad ones (wrong scale, wrong sh
 
 ```{r}
 #| echo: false
-ojs_define(data_ojs = data)
 ```
 
 ------------------------------------------------------------------------
