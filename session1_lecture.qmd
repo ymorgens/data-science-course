@@ -44,11 +44,7 @@ By the end of today you should be able to:
 
 ## What is Artificial Intelligence (AI)?
 
-![](images/clipboard-3445409771.png){width="457"}
-
-See Chapter 2: Supervised Learning from:
-
-Prince, S. J. (2023). *Understanding deep learning*. MIT press.
+![](images/clipboard-2740329712.png){width="488"}
 
 ------------------------------------------------------------------------
 
@@ -79,7 +75,7 @@ Prince, S. J. (2023). *Understanding deep learning*. MIT press.
 
 - **Training** a model = finding parameters that predict outputs “well” from inputs for a **training dataset** of input/output pairs
 
-- See [live demos 2.1, 2.2, 2.4](https://udlbook.github.io/udlfigures/) from Prince, S. J. (2023). Understanding deep learning. MIT press.
+- See [live demos 2.1, 2.2, 2.4](https://udlbook.github.io/udlfigures/) from Chapter 2 in Prince, S. J. (2023). Understanding deep learning. MIT press.
 
   - https://udlbook.github.io/udlfigures/
 
@@ -135,6 +131,36 @@ Prince, S. J. (2023). *Understanding deep learning*. MIT press.
 
 ## Example: 1D Linear regression model
 
+![](images/clipboard-669145549.png)
+
+------------------------------------------------------------------------
+
+## Example: 1D Linear regression model
+
+![](images/clipboard-34857721.png)
+
+------------------------------------------------------------------------
+
+## Example: 1D Linear regression model
+
+![](images/clipboard-34857721.png)
+
+------------------------------------------------------------------------
+
+## Example: 1D Linear regression model
+
+![](images/clipboard-3704080001.png)
+
+------------------------------------------------------------------------
+
+## Example: 1D Linear regression model
+
+![](images/clipboard-2450334396.png)
+
+------------------------------------------------------------------------
+
+## Example: 1D Linear regression model
+
 ![](images/clipboard-852355499.png)
 
 ------------------------------------------------------------------------
@@ -170,12 +196,14 @@ Prince, S. J. (2023). *Understanding deep learning*. MIT press.
 
 - The **psychometric function** is a summary of the relation between performance in a classification task (such as the ability to detect or discriminate between stimuli) and stimulus level/intensity (*Knoblauch & Maloney, 2012, Chapter 4*)
 
---
+::: {.fragment}
 
 - 3 steps of modelling data:
   - **Collect psychophysical data**\
   - **Estimate model parameters from data**
   - Model evaluation and criticism (goodness-of-fit, systematic prediction errors, confidence regions, bias, ...)
+
+:::
 
 ------------------------------------------------------------------------
 
@@ -183,13 +211,17 @@ Prince, S. J. (2023). *Understanding deep learning*. MIT press.
 
 Psychophysical data are obtained from a psychophysical experiment. Commonly a researcher wants to associate external stimulus variables with internal representations, and measures performance related to manipulations of these external variables.
 
+
 --
+
 
 ![](images/clipboard-3032077595.png)
 
 Decreasing contrast values (harder to detect)——\>
 
+
 --
+
 
 ![](images/clipboard-2354439885.png)
 
@@ -477,10 +509,6 @@ for (cand in candidates) {
 Deliberately pick one good fit and three clearly bad ones (wrong scale, wrong shape, both wrong) so students can connect "this curve visually misses the dots" to "and that's why its RMSD number is high." Point out explicitly which panel has the lowest RMSD and confirm it's also the one that looks best by eye.
 :::
 
-```{r}
-#| echo: false
-```
-
 ------------------------------------------------------------------------
 
 ## Grid search: try everything
@@ -559,9 +587,9 @@ Two physical metaphors the textbook uses:
 
 When you call `optim()`, its default method is the **Nelder-Mead Simplex** algorithm (Nelder & Mead, 1965).
 
-- A "simplex" is a simple geometric shape: for 2 parameters, it's a **triangle**, with each corner being one candidate `(alpha, beta)` combination to test — for example, one corner might be `(.1, 2)`, another `(.4, 5)`, another `(.6, 6)`
+- A "simplex" is a simple geometric shape: for 2 parameters, it's a **triangle**, with each corner being one candidate `(alpha, beta)` combination to test. For example, one corner might be `(.1, 2)`, another `(.4, 5)`, another `(.6, 6)`
 - At each step, the corner with the *worst* fit is moved: either **reflected** to the opposite side of the triangle (and possibly stretched further, if that direction looks promising), or the whole triangle **contracts** inward if reflection doesn't help
-- Repeating this, the triangle "tumbles" downhill and eventually shrinks to a single point — the best-fitting estimate
+- Repeating this, the triangle "tumbles" downhill and eventually shrinks to a single point, the best-fitting estimate
 
 ------------------------------------------------------------------------
 
