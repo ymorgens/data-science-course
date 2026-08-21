@@ -387,7 +387,6 @@ Let students watch alpha and only alpha change; unlike a pure location parameter
 ```{r}
 #| fig-hold: true
 
-s
 old_par <- par(pty = "s")
 
 curve(psychometric_model(.5, .5, x),
