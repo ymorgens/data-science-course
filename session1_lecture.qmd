@@ -8,6 +8,7 @@ format:
     incremental: false
     code-line-numbers: true
     scrollable: true
+    pdf-max-pages-per-slide: 1
 execute:
   echo: true
   warning: false
@@ -137,7 +138,7 @@ By the end of today you should be able to:
 
 ## Example: 1D Linear regression model
 
-![](images/clipboard-34857721.png)
+![](images/clipboard-2417774288.png)
 
 ------------------------------------------------------------------------
 
@@ -174,7 +175,7 @@ By the end of today you should be able to:
 
 ------------------------------------------------------------------------
 
-## Supervised learning overview
+## Supervised learning overview {.smaller .scrollable}
 
 - **Supervised learning model** = mapping from one or more inputs to one or more outputs
 
@@ -196,13 +197,11 @@ By the end of today you should be able to:
 
 - The **psychometric function** is a summary of the relation between performance in a classification task (such as the ability to detect or discriminate between stimuli) and stimulus level/intensity (*Knoblauch & Maloney, 2012, Chapter 4*)
 
-::: {.fragment}
-
+::: fragment
 - 3 steps of modelling data:
   - **Collect psychophysical data**\
   - **Estimate model parameters from data**
   - Model evaluation and criticism (goodness-of-fit, systematic prediction errors, confidence regions, bias, ...)
-
 :::
 
 ------------------------------------------------------------------------
@@ -211,17 +210,17 @@ By the end of today you should be able to:
 
 Psychophysical data are obtained from a psychophysical experiment. Commonly a researcher wants to associate external stimulus variables with internal representations, and measures performance related to manipulations of these external variables.
 
+------------------------------------------------------------------------
 
---
-
+## What are psychophysical data?
 
 ![](images/clipboard-3032077595.png)
 
 Decreasing contrast values (harder to detect)——\>
 
+------------------------------------------------------------------------
 
---
-
+## What are psychophysical data?
 
 ![](images/clipboard-2354439885.png)
 
@@ -258,6 +257,8 @@ This is presented as if it were a real dataset — no generating code, no "true"
 ## Plotting the data
 
 ```{r}
+#| fig-hold: true
+
 # Set plot region to a physical square ("s")
 old_par <- par(pty = "s")
 
@@ -282,7 +283,7 @@ Point at the plot: roughly where does it start rising steeply, and roughly how g
 
 ------------------------------------------------------------------------
 
-## The model
+## The model {.smaller}
 
 $$p(x) = 1 - e^{-(x/\alpha)^{\beta}}, \quad x \geq 0$$
 
@@ -292,7 +293,10 @@ This is the **Weibull cumulative distribution function** — see [Wikipedia: Wei
 
 - `beta` (slope)
 
---
+
+------------------------------------------------------------------------
+
+## The model {.smaller}
 
 - the Weibull CDF falls between 0 and 1. But our data falls between 0.5 and 1. We can thus squish our psychometric model to fall in the region of 0.5 to 1 as follows: $$p(x) = a + b*(1 - e^{-(x/\alpha)^{\beta}}), \quad x \geq 0$$
 
@@ -328,9 +332,11 @@ Unlike the cumulative normal, the Weibull CDF has no dependency on a built-in di
 
 ------------------------------------------------------------------------
 
-## What does `alpha` do?
+## What does `alpha` do? {.smaller}
 
 ```{r}
+#| fig-hold: true
+
 old_par <- par(pty = "s")
 
 curve(psychometric_model(.2, 1, x),
@@ -376,9 +382,12 @@ Let students watch alpha and only alpha change; unlike a pure location parameter
 
 ------------------------------------------------------------------------
 
-## What does `beta` do?
+## What does `beta` do? {.smaller}
 
 ```{r}
+#| fig-hold: true
+
+s
 old_par <- par(pty = "s")
 
 curve(psychometric_model(.5, .5, x),
@@ -435,7 +444,7 @@ $$\text{observed} = \text{model}(\alpha, \beta, x) + \text{error}$$
 
 ------------------------------------------------------------------------
 
-## How wrong is a guess? — RMSD
+## How wrong is a guess? — RMSD {.smaller}
 
 Following the textbook, we use the **root mean squared deviation (RMSD)** rather than a raw sum of squares:
 
@@ -533,7 +542,7 @@ best
 
 ------------------------------------------------------------------------
 
-## Seeing the cost surface
+## Seeing the cost surface {.smaller}
 
 ```{r}
 library(lattice)
@@ -549,7 +558,7 @@ levelplot(rmsd ~ alpha * beta, data = grid,
 
 ------------------------------------------------------------------------
 
-## Grid search doesn't scale
+## Grid search doesn't scale {.smaller}
 
 | \# parameters | grid points per parameter | total combinations to test |
 |:----------------------:|:----------------------:|:----------------------:|
@@ -567,7 +576,7 @@ Read the last row out loud slowly so the scaling problem registers as absurd rat
 
 ------------------------------------------------------------------------
 
-## What is `optim()` actually doing?
+## What is `optim()` actually doing? {.smaller}
 
 Two physical metaphors the textbook uses:
 
@@ -583,10 +592,9 @@ Two physical metaphors the textbook uses:
 
 ------------------------------------------------------------------------
 
-## Meet the method: Nelder-Mead Simplex
+## Meet the method: Nelder-Mead Simplex {.smaller}
 
-When you call `optim()`, its default method is the **Nelder-Mead Simplex** algorithm (Nelder & Mead, 1965).
-
+- When you call `optim()`, its default method is the **Nelder-Mead Simplex** algorithm (Nelder & Mead, 1965).
 - A "simplex" is a simple geometric shape: for 2 parameters, it's a **triangle**, with each corner being one candidate `(alpha, beta)` combination to test. For example, one corner might be `(.1, 2)`, another `(.4, 5)`, another `(.6, 6)`
 - At each step, the corner with the *worst* fit is moved: either **reflected** to the opposite side of the triangle (and possibly stretched further, if that direction looks promising), or the whole triangle **contracts** inward if reflection doesn't help
 - Repeating this, the triangle "tumbles" downhill and eventually shrinks to a single point, the best-fitting estimate
@@ -656,7 +664,7 @@ This is the same RMSD landscape and color scale as the "Seeing the cost surface"
 
 ------------------------------------------------------------------------
 
-## `optim()`: automatic search
+## `optim()`: automatic search {.smaller}
 
 ```{r}
 fit_rmsd <- optim(
@@ -682,7 +690,7 @@ Run the first version live and compare to `best` from the grid search — they s
 
 ------------------------------------------------------------------------
 
-## Limitations: getting stuck in a local minimum
+## Limitations: getting stuck in a local minimum {.smaller}
 
 Not every landscape looks like our psychometric-function example. Here's a synthetic (illustrative, not psychologically meaningful) example with a bumpier landscape:
 
@@ -768,7 +776,7 @@ dbinom(25, size = 40, prob = p)   # data + probability -> likelihood
 
 ------------------------------------------------------------------------
 
-## A simple case: detecting a fixed stimulus
+## A simple case: detecting a fixed stimulus {.smaller}
 
 Imagine presenting the same stimulus at a given contrast 10 times in a row, and recording correct (1) or incorrect (0) responses each time:
 
@@ -789,7 +797,9 @@ dbinom(sum(detected), size = 10, prob = 0.7)
 Ask students to guess which probability they think is "more likely" before running the second line. Worth noting that each intensity level in our psychometric data is the same kind of binomial count — just with size = 40 instead of size = 1 per observation, and aggregated into a single count rather than shown trial by trial.
 :::
 
---
+------------------------------------------------------------------------
+
+## A simple case: detecting a fixed stimulus {.smaller}
 
 - Here we just *guessed* two candidate values of `prob` (0.5 and 0.7) and compared them
 - But `prob` isn't something we get to guess directly — in our actual model, `prob` = *psychometric_model*(`alpha`, `beta`, `contrast`). Every candidate (`alpha`, `beta`) pair *implies* a specific `prob` at every contrast level
@@ -817,7 +827,7 @@ Point out that this plot has exactly the same shape/logic as the RMSD surface ea
 
 ------------------------------------------------------------------------
 
-## Seeing likelihood as heights, not distances
+## Seeing likelihood as heights, not distances {.smaller}
 
 ```{r}
 cand_good <- c(.6, 3)     # a good-fitting guess
@@ -843,7 +853,7 @@ The green bars (good params) should now visibly and clearly tower over the red b
 
 ------------------------------------------------------------------------
 
-## Seeing the *overall* likelihood
+## Seeing the *overall* likelihood {.smaller}
 
 Fitting doesn't care about one data point at a time. It cares about the **joint** probability of the whole dataset together. We get that by multiplying (or, in log terms, adding) the per-point values from the previous slide:
 
@@ -910,7 +920,7 @@ This comparison is the payoff of the whole lecture. If time allows, plot both fi
 
 ------------------------------------------------------------------------
 
-## Summary
+## Summary {.smaller}
 
 - A model has parameters, and each parameter can be tweaked to best fit the data
 - Data = model + error — that's why a fit is never perfect
